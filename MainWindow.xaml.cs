@@ -13,13 +13,10 @@ namespace PrintLogPdf3
 {
     public partial class MainWindow : Window
     {
-        private readonly string systemLogDbPath =
-            @"C:\Database\SystemLog\SystemLog.db";
+        private readonly string systemLogDbPath = @"C:\Database\SystemLog\SystemLog.db";
 
-        private const string START_MSG =
-            "M`0090`00 00 Data Changed 0 --> 1";
-        private const string END_MSG =
-            "M`0299`08 08 Data Changed 0 --> 1";
+        private const string START_MSG = "M`0090`00 00 Data Changed 0 --> 1";
+        private const string END_MSG = "M`0299`08 08 Data Changed 0 --> 1";
 
         public MainWindow()
         {
@@ -39,43 +36,39 @@ namespace PrintLogPdf3
                     return;
                 }
 
-                var batches = LoadBatches();
-
-                if (batches.Count == 0)
-                {
-                    MessageBox.Show("완료된 Batch 없음", "Batch 결과");
-                    return;
-                }
-
-                var sb = new StringBuilder();
+                var batches = LoadBatches().OrderBy(b =>b.Start).ToList();
                 for (int i = 0; i < batches.Count; i++)
                 {
-                    sb.AppendLine($"Batch {i + 1}");
-                    sb.AppendLine($"  Start: {batches[i].Start:yyyy-MM-dd HH:mm:ss.fff}");
-                    sb.AppendLine($"  End  : {batches[i].End:yyyy-MM-dd HH:mm:ss.fff}");
-                    sb.AppendLine();
+                    batches[i].Index = i + 1;
                 }
-
+                if (batches.Count == 0)
+                {
+                    MessageBox.Show("완료된 Batch 없음");
+                    return;
+                }
+                
                 var pdfPath = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                    "BatchResult.pdf");
+                    @"C:\Users\Airex Korea\Documents\넓적부리황새",
+                    "Batch_SystemLog.pdf");
 
-                ExportBatchTextToPdf(sb.ToString(), pdfPath);
+                ExportAllBatchesToPdf(batches, pdfPath);
 
                 MessageBox.Show(
                     "PDF 생성 완료:\n" + pdfPath,
                     "완료");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.ToString(), "FATAL ERROR");
-            }
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show(ex.ToString(), "FATAL ERROR");
+                        }
         }
+
 
 
         private List<BatchRange> LoadBatches()
         {
-            var events = new List<(DateTime Time, bool IsStart, bool IsEnd)>();
+            var StartEnds = new List<(DateTime Time, bool IsStart, bool IsEnd)>();
+            int BatchIndex = 1;
 
             using var conn = new SqliteConnection($"Data Source={systemLogDbPath}");
             conn.Open();
@@ -117,7 +110,7 @@ namespace PrintLogPdf3
                 var dt = date.Date.Add(time);
                 var msg = r.GetString(2);
 
-                events.Add((dt,
+                StartEnds.Add((dt,
                     msg.Contains(START_MSG),
                     msg.Contains(END_MSG)));
             }
@@ -126,22 +119,23 @@ namespace PrintLogPdf3
             var batches = new List<BatchRange>();
             int idx = 0;
 
-            while (idx < events.Count)
+            while (idx < StartEnds.Count)
             {
-                while (idx < events.Count && !events[idx].IsEnd)
+                while (idx < StartEnds.Count && !StartEnds[idx].IsEnd)
                     idx++;
-                if (idx >= events.Count) break;
+                if (idx >= StartEnds.Count) break;
 
-                var endTime = events[idx++].Time;
+                var endTime = StartEnds[idx++].Time;
 
-                while (idx < events.Count && !events[idx].IsStart)
+                while (idx < StartEnds.Count && !StartEnds[idx].IsStart)
                     idx++;
-                if (idx >= events.Count) break;
+                if (idx >= StartEnds.Count) break;
 
-                var startTime = events[idx++].Time;
+                var startTime = StartEnds[idx++].Time;
 
                 batches.Add(new BatchRange
                 {
+                    Index = BatchIndex++,
                     Start = startTime,
                     End = endTime
                 });
@@ -149,6 +143,52 @@ namespace PrintLogPdf3
 
             return batches;
         }
+
+        private List<SystemLogRow> LoadRowsInBatch(BatchRange batch)
+        {
+            var rows = new List<SystemLogRow>();
+
+            using var conn = new SqliteConnection($"Data Source={systemLogDbPath}");
+            conn.Open();
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT log_date, log_time, log_msg
+                FROM TB_SECULOG
+                WHERE
+                    (log_date || printf('%09d', log_time)) >= @start
+                AND (log_date || printf('%09d', log_time)) <= @end
+                ORDER BY log_date, log_time
+
+            ";
+
+            cmd.Parameters.AddWithValue(
+                    "@start", batch.Start.ToString("yyyyMMddHHmmssfff"));
+
+                cmd.Parameters.AddWithValue(
+                    "@end", batch.End.ToString("yyyyMMddHHmmssfff"));
+
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                // 날짜 파싱
+                var date = DateTime.ParseExact(
+            r.GetString(0), "yyyyMMdd", CultureInfo.InvariantCulture);
+
+            var time = ParseTimeSafe(long.Parse(r.GetString(1)));
+            var dt = date.Date.Add(time);
+
+
+                rows.Add(new SystemLogRow
+                {
+                    Time = dt,
+                    Msg = r.GetString(2)
+                });
+            }
+
+            return rows;
+        }
+
 
         private TimeSpan ParseTimeSafe(long value)
         {
@@ -162,28 +202,83 @@ namespace PrintLogPdf3
 
             return new TimeSpan(0, hh, mm, ss, ms);
         }
-        void ExportBatchTextToPdf(string text, string filePath)
-        {
-            QuestPDF.Fluent.Document.Create(container =>
-            {
-                container.Page(page =>
-                {
-                    page.Size(QuestPDF.Helpers.PageSizes.A4);
-                    page.Margin(30);
 
-                    page.Content()
-                        .Text(text)
-                        .FontSize(11);
-                });
+        private void ExportAllBatchesToPdf(
+            List<BatchRange> batches,
+            string pdfPath)
+        {
+            QuestPDF.Settings.License = LicenseType.Community;
+
+            Document.Create(container =>
+            {
+                foreach (var batch in batches)
+                {
+                    var rows = LoadRowsInBatch(batch);
+
+                    container.Page(page =>
+                    {
+                        page.Size(PageSizes.A4);
+                        page.Margin(20);
+
+                        page.Header()
+                            .Text($"Batch {batch.Index}\n{batch.Start:yyyy-MM-dd HH:mm:ss} ~ {batch.End:yyyy-MM-dd HH:mm:ss}")
+                            .FontSize(14)
+                            .Bold();
+
+                        page.Content().Table(table =>
+                        {
+                            table.ColumnsDefinition(c =>
+                            {
+                                c.ConstantColumn(160);
+                                c.RelativeColumn();
+                            });
+
+                            table.Header(h =>
+                            {
+                                h.Cell().Text("Time").Bold();
+                                h.Cell().Text("Message").Bold();
+                            });
+
+                            foreach (var row in rows)
+                            {
+                                table.Cell().Text(row.Time.ToString("yyyy-MM-dd HH:mm:ss"));
+                                table.Cell().Text(row.Msg);
+                            }
+                        });
+
+                        page.Footer()
+                            .AlignCenter()
+                            .Text(x =>
+                            {
+                                x.Span("Page ");
+                                x.CurrentPageNumber();
+                                x.Span(" / ");
+                                x.TotalPages();
+                            });
+                    });
+                }
             })
-            .GeneratePdf(filePath);
+            .GeneratePdf(pdfPath);
         }
+
+
 
     }
 
     class BatchRange
     {
+        public int Index { get; set; }
         public DateTime Start;
         public DateTime End;
+
+        public override string ToString()
+            => $"Batch {Index} ({Start:yyyy-MM-dd HH:mm:ss} ~ {End:yyyy-MM-dd HH:mm:ss})";
     }
+
+
+    class SystemLogRow
+        {
+            public DateTime Time;
+            public string Msg = "";
+        }
 }
