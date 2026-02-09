@@ -1,7 +1,9 @@
 ﻿using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
+using System.Windows.Controls;
 using System.Globalization;
+using System.Windows.Media;
 using System.IO;
 using System.Text;
 using System.Windows;
@@ -9,6 +11,8 @@ using QuestPDF.Fluent;
 using QuestPDF.Infrastructure;
 using QuestPDF.Drawing;
 using QuestPDF.Helpers;
+using PdfColors = QuestPDF.Helpers.Colors;
+using MediaColors = System.Windows.Media.Colors;
 
 
 namespace PrintLogPdf3
@@ -27,12 +31,44 @@ namespace PrintLogPdf3
         {
             InitializeComponent();
             QuestPDF.Settings.License = LicenseType.Community;
+            LoadBatchList();
+        }
+
+        private void LoadBatchList()
+        {
+            var batches = LoadBatches()
+                .OrderBy(b => b.Start)
+                .ToList();
+            MessageBox.Show($"Batches count = {batches.Count}"); 
+
+            for (int i = 0; i < batches.Count; i++)
+                batches[i].Index = i + 1;
+
+            BatchList.ItemsSource = batches;
+        }
+
+        private void BatchList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (BatchList.SelectedItem is BatchRange)
+            {
+                GenerateButton.IsEnabled = true;
+                GenerateButton.Background = new SolidColorBrush(MediaColors.Green);
+                GenerateButton.Foreground = new SolidColorBrush(MediaColors.White);
+            }
+            else
+            {
+                GenerateButton.IsEnabled = false;
+                GenerateButton.Background = new SolidColorBrush(MediaColors.LightGray);
+                GenerateButton.Foreground = new SolidColorBrush(MediaColors.Black);
+            }
+
         }
 
         private async void OnGenerateClick(object sender, RoutedEventArgs e)
         {
             try
             {
+                // 1️⃣ DB 존재 여부 체크 (기존 그대로)
                 if (!File.Exists(systemLogDbPath))
                 {
                     MessageBox.Show(
@@ -41,25 +77,29 @@ namespace PrintLogPdf3
                     return;
                 }
 
-                var batches = LoadBatches().OrderBy(b =>b.Start).ToList();
-                for (int i = 0; i < batches.Count; i++)
+                // 2️⃣ 선택된 batch 확인
+                if (BatchList.SelectedItem is not BatchRange batch)
                 {
-                    batches[i].Index = i + 1;
-                }
-                if (batches.Count == 0)
-                {
-                    MessageBox.Show("완료된 Batch 없음");
+                    MessageBox.Show("Batch를 선택하세요.", "알림");
                     return;
                 }
-                
+
+                // 3️⃣ PDF 경로 (선택 batch 기준)
                 var pdfPath = Path.Combine(
                     @"C:\Users\Airex Korea\Documents\넓적부리황새",
-                    "Batch_SystemLog.pdf");
+                    $"Batch_{batch.Index}.pdf");
+
                 Directory.CreateDirectory(Path.GetDirectoryName(pdfPath)!);
 
+                // 4️⃣ 버튼 비활성화
+                GenerateButton.IsEnabled = false;
+
+                // 5️⃣ 선택 batch 하나만 PDF 생성
                 await Task.Run(() =>
                 {
-                    ExportAllBatchesToPdf(batches, pdfPath);
+                    ExportAllBatchesToPdf(
+                        new List<BatchRange> { batch },
+                        pdfPath);
                 });
 
                 MessageBox.Show("PDF 생성 완료:\n" + pdfPath, "완료");
@@ -68,9 +108,17 @@ namespace PrintLogPdf3
             {
                 MessageBox.Show(ex.ToString(), "FATAL ERROR");
             }
+            finally
+            {
+                //예외가 나도 버튼은 다시 살려야 함
+                GenerateButton.IsEnabled = true;
+            }
         }
 
-
+        private void OnCloseClick(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
 
         private List<BatchRange> LoadBatches()
         {
@@ -565,7 +613,7 @@ namespace PrintLogPdf3
                     .PaddingTop(100)
                     .Text("데이터 보존 정책에 따라 자동 삭제되었습니다.")
                     .Italic()
-                    .FontColor(Colors.Grey.Darken2);
+                    .FontColor(PdfColors.Grey.Darken2);
                 }
                 else
                 {
@@ -659,7 +707,7 @@ namespace PrintLogPdf3
                             col.Item().Text("Alarm Log")
                                 .FontSize(12)
                                 .Bold()
-                                .FontColor(Colors.Red.Medium);
+                                .FontColor(PdfColors.Red.Medium);
 
                             if (alarmRows.Count == 0)
                             {
@@ -668,7 +716,7 @@ namespace PrintLogPdf3
                                     .PaddingLeft(10)
                                     .Text("No Alarm in this batch")
                                     .Italic()
-                                    .FontColor(Colors.Grey.Darken1);
+                                    .FontColor(PdfColors.Grey.Darken1);
                             }
                             else
                             {
