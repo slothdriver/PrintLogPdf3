@@ -10,14 +10,15 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>
+        </Grid.RowDefinitions>  
 
         <!-- Batch List -->
         <GroupBox Header="Batch List" FontWeight="Bold">
             <ListBox x:Name="BatchList"
-                     SelectionChanged="BatchList_SelectionChanged"
-                     
-                     FontSize="14"/>
+            DisplayMemberPath="DisplayName"
+            SelectionChanged="BatchList_SelectionChanged"
+            FontSize="14"/>
+
         </GroupBox>
 
         <!-- Buttons -->

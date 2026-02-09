@@ -775,8 +775,8 @@ namespace PrintLogPdf3
         public DateTime Start;
         public DateTime End;
 
-        public override string ToString()
-            => $"Batch {Index} ({Start:yyyy-MM-dd HH:mm:ss} ~ {End:yyyy-MM-dd HH:mm:ss})";
+        public string DisplayName =>
+        $"Batch {Index} ({Start:yyyy-MM-dd HH:mm:ss} ~ {End:yyyy-MM-dd HH:mm:ss})";
     }
 
     class SystemLogRow
