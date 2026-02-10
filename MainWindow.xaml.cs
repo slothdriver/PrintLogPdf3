@@ -22,17 +22,26 @@ namespace PrintLogPdf3
         private readonly string systemLogDbPath = @"C:\Database\SystemLog\SystemLog.db";
         private readonly string alarmLogDbPath = @"C:\Database\Alarm\GlobalAlarm.db";
         private readonly string globalLogDbPath = @"C:\Database\Logging\GlobalLog.db";
+        private readonly string _currentUserId;
+        private readonly string _currentUserRole;
 
 
         private const string START_MSG = "M`0090`00 00 Data Changed 0 --> 1";
         private const string END_MSG = "M`0299`08 08 Data Changed 0 --> 1";
 
-        public MainWindow()
+        public MainWindow(string userId, string role)
         {
             InitializeComponent();
             QuestPDF.Settings.License = LicenseType.Community;
             LoadBatchList();
+            _currentUserId = userId;
+            _currentUserRole = role;
+
+            Title = $"Batch PDF Generator - Login: {_currentUserId}";
+            LoginInfoText.Text = $"Logged in as: {_currentUserId} ({_currentUserRole})";
         }
+
+        
 
         private void LoadBatchList()
         {
@@ -68,7 +77,7 @@ namespace PrintLogPdf3
         {
             try
             {
-                // 1️⃣ DB 존재 여부 체크 (기존 그대로)
+                // DB 존재 여부 체크 (기존 그대로)
                 if (!File.Exists(systemLogDbPath))
                 {
                     MessageBox.Show(
@@ -77,24 +86,24 @@ namespace PrintLogPdf3
                     return;
                 }
 
-                // 2️⃣ 선택된 batch 확인
+                // 선택된 batch 확인
                 if (BatchList.SelectedItem is not BatchRange batch)
                 {
                     MessageBox.Show("Batch를 선택하세요.", "알림");
                     return;
                 }
 
-                // 3️⃣ PDF 경로 (선택 batch 기준)
+                // PDF 경로 (선택 batch 기준)
                 var pdfPath = Path.Combine(
                     @"C:\Users\Airex Korea\Documents\넓적부리황새",
                     $"Batch_{batch.Index}.pdf");
 
                 Directory.CreateDirectory(Path.GetDirectoryName(pdfPath)!);
 
-                // 4️⃣ 버튼 비활성화
+                // 버튼 비활성화
                 GenerateButton.IsEnabled = false;
 
-                // 5️⃣ 선택 batch 하나만 PDF 생성
+                // 선택 batch 하나만 PDF 생성
                 await Task.Run(() =>
                 {
                     ExportAllBatchesToPdf(

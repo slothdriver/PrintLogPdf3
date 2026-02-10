@@ -46,18 +46,18 @@ namespace PrintLogPdf3
             }
         }
 
-        private bool CheckLogin(string id, string pw)
+        private bool TryLogin(string id, string pw, out string role)
         {
-            // 입력 비밀번호를 해시로 변환
+            role = "";
+
             string hash = HashPassword(pw);
-            
-            using var con = new SqliteConnection(
-                $"Data Source={accountDbPath}");
+
+            using var con = new SqliteConnection($"Data Source={accountDbPath}");
             con.Open();
 
             using var cmd = con.CreateCommand();
             cmd.CommandText = """
-                SELECT COUNT(*)
+                SELECT ROLE
                 FROM ACCOUNT
                 WHERE ID = @id
                 AND PASSWORD_HASH = @hash
@@ -66,9 +66,14 @@ namespace PrintLogPdf3
             cmd.Parameters.AddWithValue("@id", id);
             cmd.Parameters.AddWithValue("@hash", hash);
 
-            var count = (long)cmd.ExecuteScalar();
-            return count > 0;
+            var result = cmd.ExecuteScalar();
+            if (result == null)
+                return false;
+
+            role = result.ToString()!;
+            return true;
         }
+
 
         private static string HashPassword(string password)
         {
@@ -80,23 +85,24 @@ namespace PrintLogPdf3
 
         private void OnLogin(object sender, RoutedEventArgs e)
         {
-            var id = IdBox.Text;
+            var id = IdBox.Text.Trim();
             var pw = PwBox.Password;
 
-            if (!CheckLogin(id, pw))
+            if (!TryLogin(id, pw, out var role))
             {
                 MessageBox.Show(
-                    "계정이 존재하지 않거나 비밀번호가 올바르지 않습니다.\n계정을 생성하세요.",
+                    "계정이 존재하지 않거나 비밀번호가 올바르지 않습니다.",
                     "Login Failed",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 return;
             }
 
-            var main = new MainWindow();
+            var main = new MainWindow(id, role);
             main.Show();
             this.Close();
         }
+
 
 
         private void OnCreateAccount(object sender, RoutedEventArgs e)

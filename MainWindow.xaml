@@ -7,22 +7,37 @@
         WindowStartupLocation="CenterScreen">
 
     <Grid Margin="20">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="*" />
-            <RowDefinition Height="Auto" />
-        </Grid.RowDefinitions>  
+    <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>   <!-- 로그인 정보 -->
+        <RowDefinition Height="*"/>      <!-- Batch List -->
+        <RowDefinition Height="Auto"/>   <!-- Buttons -->
+    </Grid.RowDefinitions>
+        
+        <Border Grid.Row="0"
+                Background="#F2F2F2"
+                Padding="8"
+                Margin="0,0,0,10"
+                BorderBrush="#CCCCCC"
+                BorderThickness="0,0,0,1">
+
+            <TextBlock x:Name="LoginInfoText"
+                    FontSize="13"
+                    FontWeight="SemiBold"
+                    Foreground="#333"/>
+        </Border>
 
         <!-- Batch List -->
-        <GroupBox Header="Batch List" FontWeight="Bold">
+        <GroupBox Grid.Row="1"
+          Header="Batch List"
+          FontWeight="Bold">
             <ListBox x:Name="BatchList"
-            DisplayMemberPath="DisplayName"
-            SelectionChanged="BatchList_SelectionChanged"
-            FontSize="14"/>
-
+                    DisplayMemberPath="DisplayName"
+                    SelectionChanged="BatchList_SelectionChanged"
+                    FontSize="14"/>
         </GroupBox>
 
         <!-- Buttons -->
-        <StackPanel Grid.Row="1"
+        <StackPanel Grid.Row="2"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,15,0,0">
