@@ -32,11 +32,11 @@
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Margin="0,20">
-            <Button Content="취소"
+            <Button Content="Cancel"
                     Width="80"
                     Margin="0,0,10,0"
                     Click="OnCancel"/>
-            <Button Content="생성"
+            <Button Content="Create"
                     Width="80"
                     Click="OnCreate"/>
         </StackPanel>

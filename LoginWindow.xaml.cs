@@ -1,6 +1,10 @@
 using Microsoft.Data.Sqlite;
+using System;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text;
 using System.Windows;
+
 
 namespace PrintLogPdf3
 {
@@ -44,6 +48,9 @@ namespace PrintLogPdf3
 
         private bool CheckLogin(string id, string pw)
         {
+            // 입력 비밀번호를 해시로 변환
+            string hash = HashPassword(pw);
+            
             using var con = new SqliteConnection(
                 $"Data Source={accountDbPath}");
             con.Open();
@@ -53,15 +60,23 @@ namespace PrintLogPdf3
                 SELECT COUNT(*)
                 FROM ACCOUNT
                 WHERE ID = @id
-                AND PASSWORD_HASH = @pw
+                AND PASSWORD_HASH = @hash
             """;
+
             cmd.Parameters.AddWithValue("@id", id);
-            cmd.Parameters.AddWithValue("@pw", pw); // 나중에 hash로 교체
+            cmd.Parameters.AddWithValue("@hash", hash);
 
             var count = (long)cmd.ExecuteScalar();
             return count > 0;
         }
 
+        private static string HashPassword(string password)
+        {
+            using var sha = SHA256.Create();
+            var bytes = Encoding.UTF8.GetBytes(password);
+            var hash = sha.ComputeHash(bytes);
+            return Convert.ToHexString(hash);
+        }
 
         private void OnLogin(object sender, RoutedEventArgs e)
         {
@@ -86,7 +101,6 @@ namespace PrintLogPdf3
 
         private void OnCreateAccount(object sender, RoutedEventArgs e)
         {
-            // 나중에 구현할 화면
             var win = new CreateAccount();
             win.ShowDialog();
         }
