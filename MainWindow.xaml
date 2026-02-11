@@ -33,10 +33,33 @@
         <GroupBox x:Name="BatchSelectPanel"
                 Header="Batch List"
                 FontWeight="Bold">
-            <ListBox x:Name="BatchList"
-                    DisplayMemberPath="DisplayName"
-                    SelectionChanged="BatchList_SelectionChanged"
-                    FontSize="14"/>
+            <ListView x:Name="BatchListView"
+          SelectionChanged="BatchListView_SelectionChanged"
+          FontSize="14">
+
+        <ListView.View>
+                <GridView>
+
+                <!-- Batch 시간 -->
+                <GridViewColumn Header="Batch"
+                                Width="300"
+                                DisplayMemberBinding="{Binding DisplayName}" />
+
+                <!-- 결재 요청 여부 -->
+                <GridViewColumn Header="Request"
+                                Width="100"
+                                DisplayMemberBinding="{Binding RequestStatus}" />
+
+                <!-- 결재 승인 여부 -->
+                <GridViewColumn Header="Approved"
+                                Width="100"
+                                DisplayMemberBinding="{Binding ApproveStatus}" />
+
+                </GridView>
+        </ListView.View>
+
+        </ListView>
+
         </GroupBox>
 
         <GroupBox x:Name="ChecklistPanel"

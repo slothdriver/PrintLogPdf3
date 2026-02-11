@@ -56,13 +56,13 @@ namespace PrintLogPdf3
 
             for (int i = 0; i < batches.Count; i++)
                 batches[i].Index = i + 1;
-
-            BatchList.ItemsSource = batches;
+            MergeApprovalStatus(batches);
+            BatchListView.ItemsSource = batches;
         }
 
-        private void BatchList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void BatchListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (BatchList.SelectedItem is BatchRange batch)
+            if (BatchListView.SelectedItem is BatchRange batch)
             {
                 _selectedBatch = batch;
 
@@ -106,7 +106,7 @@ namespace PrintLogPdf3
             GenerateButton.Visibility = Visibility.Collapsed;
 
             //batch 선택 무효화 
-            BatchList.SelectedItem = null;
+            BatchListView.SelectedItem = null;
             _selectedBatch = null;
             NextButton.IsEnabled = false;
 
@@ -132,8 +132,6 @@ namespace PrintLogPdf3
 
                 start_time     TEXT NOT NULL,
                 end_time       TEXT NOT NULL,
-
-                batchname      TEXT NOT NULL,
                 request_time   TEXT NOT NULL,
                 request_user   TEXT NOT NULL,
                 approval_time  TEXT NULL,
@@ -153,14 +151,13 @@ namespace PrintLogPdf3
             using var cmd = con.CreateCommand();
             cmd.CommandText = @"
             INSERT INTO ApprovalLog
-            (start_time, end_time, batchname, request_time, request_user, approval_time, check1, check2, check3)
+            (start_time, end_time, request_time, request_user, approval_time, check1, check2, check3)
             VALUES
-            (@start, @end, @batchname, @reqTime, @user, NULL, @c1, @c2, @c3);
+            (@start, @end, @reqTime, @user, NULL, @c1, @c2, @c3);
             ";
 
             cmd.Parameters.AddWithValue("@start", batch.Start.ToString("yyyy-MM-dd HH:mm:ss"));
             cmd.Parameters.AddWithValue("@end", batch.End.ToString("yyyy-MM-dd HH:mm:ss"));
-            cmd.Parameters.AddWithValue("@batchname", batch.ToString());
             cmd.Parameters.AddWithValue("@reqTime", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
             cmd.Parameters.AddWithValue("@user", _currentUserId);
             cmd.Parameters.AddWithValue("@c1", check1 ? 1 : 0);
@@ -290,6 +287,48 @@ namespace PrintLogPdf3
 
             return batches;
         }
+
+        private void MergeApprovalStatus(List<BatchRange> batches)
+{
+    if (!File.Exists(approvalLogDbPath))
+        return;
+
+    using var con = new SqliteConnection($"Data Source={approvalLogDbPath}");
+    con.Open();
+
+    foreach (var batch in batches)
+    {
+        using var cmd = con.CreateCommand();
+        cmd.CommandText = @"
+            SELECT approval_time
+            FROM ApprovalLog
+            WHERE start_time = @start
+            AND end_time   = @end
+            LIMIT 1;
+        ";
+
+        cmd.Parameters.AddWithValue("@start",
+            batch.Start.ToString("yyyy-MM-dd HH:mm:ss"));
+
+        cmd.Parameters.AddWithValue("@end",
+            batch.End.ToString("yyyy-MM-dd HH:mm:ss"));
+
+        using var reader = cmd.ExecuteReader();
+
+        if (reader.Read())
+        {
+            batch.IsRequested = true;
+
+            var approveObj = reader["approval_time"];
+            batch.IsApproved = approveObj != DBNull.Value;
+        }
+        else
+        {
+            batch.IsRequested = false;
+            batch.IsApproved  = false;
+        }
+    }
+}
 
         private List<SystemLogRow> LoadRowsInBatch(BatchRange batch)
         {
@@ -865,11 +904,20 @@ namespace PrintLogPdf3
         public DateTime Start;
         public DateTime End;
 
+        // ✅ 결재 상태 (DB에서 채움)
+        public bool IsRequested { get; set; }
+        public bool IsApproved { get; set; }
+
+        // ✅ ListView 표기용(원하면)
+        public string RequestStatus => IsRequested ? "Requested" : "-";
+        public string ApproveStatus => IsApproved ? "Approved" : "-";
+
         public string DisplayName =>
             $"Batch {Index} ({Start:yyyy-MM-dd HH:mm:ss} ~ {End:yyyy-MM-dd HH:mm:ss})";
 
         public override string ToString() => DisplayName;
     }
+
 
 
     class SystemLogRow
