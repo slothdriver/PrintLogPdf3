@@ -13,6 +13,9 @@ using QuestPDF.Drawing;
 using QuestPDF.Helpers;
 using PdfColors = QuestPDF.Helpers.Colors;
 using MediaColors = System.Windows.Media.Colors;
+using System.Linq;
+using System.Threading.Tasks;
+
 
 
 namespace PrintLogPdf3
@@ -22,8 +25,11 @@ namespace PrintLogPdf3
         private readonly string systemLogDbPath = @"C:\Database\SystemLog\SystemLog.db";
         private readonly string alarmLogDbPath = @"C:\Database\Alarm\GlobalAlarm.db";
         private readonly string globalLogDbPath = @"C:\Database\Logging\GlobalLog.db";
+        private readonly string approvalLogDbPath = @"C:\Database\ApprovalLog\ApprovalLog.db";
+
         private readonly string _currentUserId;
         private readonly string _currentUserRole;
+        private BatchRange? _selectedBatch;
 
 
         private const string START_MSG = "M`0090`00 00 Data Changed 0 --> 1";
@@ -31,17 +37,15 @@ namespace PrintLogPdf3
 
         public MainWindow(string userId, string role)
         {
-            InitializeComponent();
-            QuestPDF.Settings.License = LicenseType.Community;
-            LoadBatchList();
             _currentUserId = userId;
             _currentUserRole = role;
-
+            InitializeComponent();
+            QuestPDF.Settings.License = LicenseType.Community;
+            EnsureApprovalLogDb();
             Title = $"Batch PDF Generator - Login: {_currentUserId}";
             LoginInfoText.Text = $"Logged in as: {_currentUserId} ({_currentUserRole})";
+            LoadBatchList();
         }
-
-        
 
         private void LoadBatchList()
         {
@@ -58,71 +62,150 @@ namespace PrintLogPdf3
 
         private void BatchList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (BatchList.SelectedItem is BatchRange)
+            if (BatchList.SelectedItem is BatchRange batch)
             {
-                GenerateButton.IsEnabled = true;
-                GenerateButton.Background = new SolidColorBrush(MediaColors.Green);
-                GenerateButton.Foreground = new SolidColorBrush(MediaColors.White);
+                _selectedBatch = batch;
+
+                NextButton.IsEnabled = true;
+                NextButton.Background = new SolidColorBrush(MediaColors.Green);
+                NextButton.Foreground = new SolidColorBrush(MediaColors.White);
             }
             else
             {
-                GenerateButton.IsEnabled = false;
-                GenerateButton.Background = new SolidColorBrush(MediaColors.LightGray);
-                GenerateButton.Foreground = new SolidColorBrush(MediaColors.Black);
-            }
+                _selectedBatch = null;
 
+                NextButton.IsEnabled = false;
+                NextButton.Background = new SolidColorBrush(MediaColors.LightGray);
+                NextButton.Foreground = new SolidColorBrush(MediaColors.Black);
+            }
         }
 
-        private async void OnGenerateClick(object sender, RoutedEventArgs e)
+
+        private void NextButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selectedBatch == null)
+                return;
+
+            BatchSelectPanel.Visibility = Visibility.Collapsed;
+            ChecklistPanel.Visibility = Visibility.Visible;
+
+            BackButton.Visibility = Visibility.Visible;
+            NextButton.Visibility = Visibility.Collapsed;
+            GenerateButton.Visibility = Visibility.Visible;
+
+            GenerateButton.IsEnabled = true; //체크 여부와 무관
+        }
+
+        private void BackButton_Click(object sender, RoutedEventArgs e)
+        {
+            ChecklistPanel.Visibility = Visibility.Collapsed;
+            BatchSelectPanel.Visibility = Visibility.Visible;
+
+            BackButton.Visibility = Visibility.Collapsed;
+            NextButton.Visibility = Visibility.Visible;
+            GenerateButton.Visibility = Visibility.Collapsed;
+
+            //batch 선택 무효화 
+            BatchList.SelectedItem = null;
+            _selectedBatch = null;
+            NextButton.IsEnabled = false;
+
+            //체크도 초기화
+            Check1.IsChecked = false;
+            Check2.IsChecked = false;
+            Check3.IsChecked = false;
+            NextButton.Background = new SolidColorBrush(MediaColors.LightGray);
+            NextButton.Foreground = new SolidColorBrush(MediaColors.Black);
+
+        }
+        private void EnsureApprovalLogDb()
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(approvalLogDbPath)!);
+
+            using var con = new SqliteConnection($"Data Source={approvalLogDbPath}");
+            con.Open();
+
+            using var cmd = con.CreateCommand();
+            cmd.CommandText = @"
+            CREATE TABLE IF NOT EXISTS ApprovalLog (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                start_time     TEXT NOT NULL,
+                end_time       TEXT NOT NULL,
+
+                batchname      TEXT NOT NULL,
+                request_time   TEXT NOT NULL,
+                request_user   TEXT NOT NULL,
+                approval_time  TEXT NULL,
+                check1         INTEGER NOT NULL,
+                check2         INTEGER NOT NULL,
+                check3         INTEGER NOT NULL,
+
+                UNIQUE(start_time, end_time)
+            );";
+            cmd.ExecuteNonQuery();
+        }
+        private void InsertApprovalRequest(BatchRange batch, bool check1, bool check2, bool check3)
+        {
+            using var con = new SqliteConnection($"Data Source={approvalLogDbPath}");
+            con.Open();
+
+            using var cmd = con.CreateCommand();
+            cmd.CommandText = @"
+            INSERT INTO ApprovalLog
+            (start_time, end_time, batchname, request_time, request_user, approval_time, check1, check2, check3)
+            VALUES
+            (@start, @end, @batchname, @reqTime, @user, NULL, @c1, @c2, @c3);
+            ";
+
+            cmd.Parameters.AddWithValue("@start", batch.Start.ToString("yyyy-MM-dd HH:mm:ss"));
+            cmd.Parameters.AddWithValue("@end", batch.End.ToString("yyyy-MM-dd HH:mm:ss"));
+            cmd.Parameters.AddWithValue("@batchname", batch.ToString());
+            cmd.Parameters.AddWithValue("@reqTime", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+            cmd.Parameters.AddWithValue("@user", _currentUserId);
+            cmd.Parameters.AddWithValue("@c1", check1 ? 1 : 0);
+            cmd.Parameters.AddWithValue("@c2", check2 ? 1 : 0);
+            cmd.Parameters.AddWithValue("@c3", check3 ? 1 : 0);
+
+            cmd.ExecuteNonQuery();
+        }
+
+        private void OnGenerateClick(object sender, RoutedEventArgs e)
         {
             try
             {
-                // DB 존재 여부 체크 (기존 그대로)
                 if (!File.Exists(systemLogDbPath))
                 {
-                    MessageBox.Show(
-                        "DB 파일 없음:\n" + systemLogDbPath,
-                        "ERROR");
+                    MessageBox.Show("DB 파일 없음:\n" + systemLogDbPath, "ERROR");
                     return;
                 }
 
-                // 선택된 batch 확인
-                if (BatchList.SelectedItem is not BatchRange batch)
+                if (_selectedBatch is not BatchRange batch)
                 {
-                    MessageBox.Show("Batch를 선택하세요.", "알림");
+                    MessageBox.Show("Batch가 선택되지 않았습니다.", "알림");
                     return;
                 }
 
-                // PDF 경로 (선택 batch 기준)
-                var pdfPath = Path.Combine(
-                    @"C:\Users\Airex Korea\Documents\넓적부리황새",
-                    $"Batch_{batch.Index}.pdf");
+                bool check1 = Check1.IsChecked == true;
+                bool check2 = Check2.IsChecked == true;
+                bool check3 = Check3.IsChecked == true;
 
-                Directory.CreateDirectory(Path.GetDirectoryName(pdfPath)!);
-
-                // 버튼 비활성화
-                GenerateButton.IsEnabled = false;
-
-                // 선택 batch 하나만 PDF 생성
-                await Task.Run(() =>
+                try
                 {
-                    ExportAllBatchesToPdf(
-                        new List<BatchRange> { batch },
-                        pdfPath);
-                });
-
-                MessageBox.Show("PDF 생성 완료:\n" + pdfPath, "완료");
+                    InsertApprovalRequest(batch, check1, check2, check3);
+                    MessageBox.Show("Data 저장 완료");
+                }
+                catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+                {
+                    MessageBox.Show("이미 저장된 Batch입니다.", "중복 저장 불가");
+                }
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.ToString(), "FATAL ERROR");
             }
-            finally
-            {
-                //예외가 나도 버튼은 다시 살려야 함
-                GenerateButton.IsEnabled = true;
-            }
         }
+
 
         private void OnCloseClick(object sender, RoutedEventArgs e)
         {
@@ -655,8 +738,6 @@ namespace PrintLogPdf3
             return new TimeSpan(0, hh, mm, ss, ms);
         }
 
-        
-
         private void ExportAllBatchesToPdf(
             List<BatchRange> batches,
             string pdfPath)
@@ -785,8 +866,11 @@ namespace PrintLogPdf3
         public DateTime End;
 
         public string DisplayName =>
-        $"Batch {Index} ({Start:yyyy-MM-dd HH:mm:ss} ~ {End:yyyy-MM-dd HH:mm:ss})";
+            $"Batch {Index} ({Start:yyyy-MM-dd HH:mm:ss} ~ {End:yyyy-MM-dd HH:mm:ss})";
+
+        public override string ToString() => DisplayName;
     }
+
 
     class SystemLogRow
     {

@@ -27,35 +27,79 @@
         </Border>
 
         <!-- Batch List -->
-        <GroupBox Grid.Row="1"
-          Header="Batch List"
-          FontWeight="Bold">
+        <Grid Grid.Row="1">
+
+        <!-- ================= Batch 선택 화면 ================= -->
+        <GroupBox x:Name="BatchSelectPanel"
+                Header="Batch List"
+                FontWeight="Bold">
             <ListBox x:Name="BatchList"
                     DisplayMemberPath="DisplayName"
                     SelectionChanged="BatchList_SelectionChanged"
                     FontSize="14"/>
         </GroupBox>
 
+        <GroupBox x:Name="ChecklistPanel"
+                Header="Checklist"
+                FontWeight="Bold"
+                Visibility="Collapsed">
+
+            <StackPanel Margin="10">
+                <CheckBox x:Name="Check1"
+                        Content="승인되지 않은 사용자 변경이 있습니까? 변경 사유 기입"
+                        FontSize="14"
+                        Margin="0,5"/>
+
+                <CheckBox x:Name="Check2"
+                        Content="알람이 발생했습니까? 알람 발생후 조치 내용 기입"
+                        FontSize="14"
+                        Margin="0,5"/>
+
+                <CheckBox x:Name="Check3"
+                        Content="자동운전의 설정값을 변경한 적이 있습니까? 변경 이유 기입"
+                        FontSize="14"
+                        Margin="0,5"/>
+            </StackPanel>
+        </GroupBox>
+
+    </Grid>
+
+
         <!-- Buttons -->
         <StackPanel Grid.Row="2"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    Margin="0,15,0,0">
+            Orientation="Horizontal"
+            HorizontalAlignment="Right"
+            Margin="0,15,0,0">
 
-            <Button x:Name="GenerateButton"
-                    Content="PDF 생성"
-                    Width="120"
-                    Height="40"
-                    Margin="0,0,10,0"
-                    Click="OnGenerateClick"
-                    IsEnabled="False"
-                    Background="#E0E0E0"
-                    Foreground="Black"/>
+        <Button x:Name="BackButton"
+                Content="뒤로가기"
+                Width="100"
+                Height="40"
+                Margin="0,0,10,0"
+                Click="BackButton_Click"
+                Visibility="Collapsed"/>
 
-            <Button Content="닫기"
-                    Width="80"
-                    Height="40"
-                    Click="OnCloseClick"/>
-        </StackPanel>
+        <Button x:Name="NextButton"
+                Content="다음"
+                Width="100"
+                Height="40"
+                Margin="0,0,10,0"
+                Click="NextButton_Click"
+                IsEnabled="False"/>
+
+        <Button x:Name="GenerateButton"
+                Content="저장"
+                Width="120"
+                Height="40"
+                Margin="0,0,10,0"
+                Click="OnGenerateClick"
+                Visibility="Collapsed"/>
+
+        <Button Content="닫기"
+                Width="80"
+                Height="40"
+                Click="OnCloseClick"/>
+    </StackPanel>
+
     </Grid>
 </Window>
