@@ -110,12 +110,12 @@
                 Click="NextButton_Click"
                 IsEnabled="False"/>
 
-        <Button x:Name="GenerateButton"
-                Content="저장"
+        <Button x:Name="OnView"
+                Content="열기"
                 Width="120"
                 Height="40"
                 Margin="0,0,10,0"
-                Click="OnGenerateClick"
+                Click="OnViewClick"
                 Visibility="Collapsed"/>
 
         <Button Content="닫기"

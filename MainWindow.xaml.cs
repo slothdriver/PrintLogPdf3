@@ -91,9 +91,9 @@ namespace PrintLogPdf3
 
             BackButton.Visibility = Visibility.Visible;
             NextButton.Visibility = Visibility.Collapsed;
-            GenerateButton.Visibility = Visibility.Visible;
+            OnView.Visibility = Visibility.Visible;
 
-            GenerateButton.IsEnabled = true; //체크 여부와 무관
+            OnView.IsEnabled = true; //체크 여부와 무관
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
@@ -103,7 +103,7 @@ namespace PrintLogPdf3
 
             BackButton.Visibility = Visibility.Collapsed;
             NextButton.Visibility = Visibility.Visible;
-            GenerateButton.Visibility = Visibility.Collapsed;
+            OnView.Visibility = Visibility.Collapsed;
 
             //batch 선택 무효화 
             BatchListView.SelectedItem = null;
@@ -203,6 +203,29 @@ namespace PrintLogPdf3
             }
         }
 
+        private async void OnViewClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_selectedBatch is not BatchRange batch)
+                {
+                    MessageBox.Show("Batch가 선택되지 않았습니다.", "알림");
+                    return;
+                }
+
+                //여기서 PDF 메모리 생성
+                var pdfBytes = await ExportAllBatchesToMemoryAsync(new List<BatchRange> { batch });
+
+                var viewer = new ViewerWindow(pdfBytes);
+                viewer.ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "VIEW ERROR");
+            }
+        }
+
+
 
         private void OnCloseClick(object sender, RoutedEventArgs e)
         {
@@ -289,46 +312,46 @@ namespace PrintLogPdf3
         }
 
         private void MergeApprovalStatus(List<BatchRange> batches)
-{
-    if (!File.Exists(approvalLogDbPath))
-        return;
-
-    using var con = new SqliteConnection($"Data Source={approvalLogDbPath}");
-    con.Open();
-
-    foreach (var batch in batches)
-    {
-        using var cmd = con.CreateCommand();
-        cmd.CommandText = @"
-            SELECT approval_time
-            FROM ApprovalLog
-            WHERE start_time = @start
-            AND end_time   = @end
-            LIMIT 1;
-        ";
-
-        cmd.Parameters.AddWithValue("@start",
-            batch.Start.ToString("yyyy-MM-dd HH:mm:ss"));
-
-        cmd.Parameters.AddWithValue("@end",
-            batch.End.ToString("yyyy-MM-dd HH:mm:ss"));
-
-        using var reader = cmd.ExecuteReader();
-
-        if (reader.Read())
         {
-            batch.IsRequested = true;
+            if (!File.Exists(approvalLogDbPath))
+                return;
 
-            var approveObj = reader["approval_time"];
-            batch.IsApproved = approveObj != DBNull.Value;
+            using var con = new SqliteConnection($"Data Source={approvalLogDbPath}");
+            con.Open();
+
+            foreach (var batch in batches)
+            {
+                using var cmd = con.CreateCommand();
+                cmd.CommandText = @"
+                    SELECT approval_time
+                    FROM ApprovalLog
+                    WHERE start_time = @start
+                    AND end_time   = @end
+                    LIMIT 1;
+                ";
+
+                cmd.Parameters.AddWithValue("@start",
+                    batch.Start.ToString("yyyy-MM-dd HH:mm:ss"));
+
+                cmd.Parameters.AddWithValue("@end",
+                    batch.End.ToString("yyyy-MM-dd HH:mm:ss"));
+
+                using var reader = cmd.ExecuteReader();
+
+                if (reader.Read())
+                {
+                    batch.IsRequested = true;
+
+                    var approveObj = reader["approval_time"];
+                    batch.IsApproved = approveObj != DBNull.Value;
+                }
+                else
+                {
+                    batch.IsRequested = false;
+                    batch.IsApproved  = false;
+                }
+            }
         }
-        else
-        {
-            batch.IsRequested = false;
-            batch.IsApproved  = false;
-        }
-    }
-}
 
         private List<SystemLogRow> LoadRowsInBatch(BatchRange batch)
         {
@@ -777,13 +800,13 @@ namespace PrintLogPdf3
             return new TimeSpan(0, hh, mm, ss, ms);
         }
 
-        private void ExportAllBatchesToPdf(
-            List<BatchRange> batches,
-            string pdfPath)
+        private IDocument CreateBatchForm(
+            List<BatchRange> batches
+            )
         {
             QuestPDF.Settings.License = LicenseType.Community;
 
-            Document.Create(container =>
+            return Document.Create(container =>
             {
                 foreach (var batch in batches)
                 {
@@ -877,8 +900,7 @@ namespace PrintLogPdf3
                                 col.Item().PageBreak();
                                 ComposeBatchGlobalLogGraph(col, batch);
                                 col.Item().PageBreak();
-
-                                
+       
                         });
                             page.Footer()
                             .AlignCenter()
@@ -889,56 +911,77 @@ namespace PrintLogPdf3
                                 x.Span(" / ");
                                 x.TotalPages();
                             });
-                    });
-                }
-            })
-            .GeneratePdf(pdfPath);
+                });
+                
+            }});
+            
         }
+
+        public void ExportAllBatchesToFile(
+            List<BatchRange> batches,
+            string pdfPath)
+        {
+            var document = CreateBatchForm(batches);
+
+            document.GeneratePdf(pdfPath);
+        }
+
+        public async Task<byte[]> ExportAllBatchesToMemoryAsync(List<BatchRange> batches)
+        {
+            return await Task.Run(() =>
+            {
+                var document = CreateBatchForm(batches);
+
+                using var stream = new MemoryStream();
+                document.GeneratePdf(stream);
+
+                return stream.ToArray();
+            });
+        }
+
+
+        public class BatchRange
+        {
+            public int Index { get; set; }
+            public DateTime Start;
+            public DateTime End;
+
+            // 결재 상태 (DB에서 채움)
+            public bool IsRequested { get; set; }
+            public bool IsApproved { get; set; }
+
+            // ListView 표기용(원하면)
+            public string RequestStatus => IsRequested ? "Requested" : "-";
+            public string ApproveStatus => IsApproved ? "Approved" : "-";
+
+            public string DisplayName =>
+                $"Batch {Index} ({Start:yyyy-MM-dd HH:mm:ss} ~ {End:yyyy-MM-dd HH:mm:ss})";
+
+            public override string ToString() => DisplayName;
+        }
+
+
+
+        class SystemLogRow
+        {
+            public DateTime Time;
+            public string Msg = "";
+        }
+
+        class AlarmLogRow
+        {
+            public DateTime Time;
+            public string Msg = "";
+        }
+        class GlobalLogPoint
+        {
+            public DateTime Time { get; set; }
+
+            public double Column1 { get; set; }   
+            public double Column2 { get; set; }   
+            public double Column3 { get; set; }   
+            public int ProcessCode { get; set; }   // COLUMN_8
+        }
+    
     }
-
-
-
-    class BatchRange
-    {
-        public int Index { get; set; }
-        public DateTime Start;
-        public DateTime End;
-
-        // ✅ 결재 상태 (DB에서 채움)
-        public bool IsRequested { get; set; }
-        public bool IsApproved { get; set; }
-
-        // ✅ ListView 표기용(원하면)
-        public string RequestStatus => IsRequested ? "Requested" : "-";
-        public string ApproveStatus => IsApproved ? "Approved" : "-";
-
-        public string DisplayName =>
-            $"Batch {Index} ({Start:yyyy-MM-dd HH:mm:ss} ~ {End:yyyy-MM-dd HH:mm:ss})";
-
-        public override string ToString() => DisplayName;
-    }
-
-
-
-    class SystemLogRow
-    {
-        public DateTime Time;
-        public string Msg = "";
-    }
-
-    class AlarmLogRow
-    {
-        public DateTime Time;
-        public string Msg = "";
-    }
-    class GlobalLogPoint
-    {
-        public DateTime Time { get; set; }
-
-        public double Column1 { get; set; }   
-        public double Column2 { get; set; }   
-        public double Column3 { get; set; }   
-        public int ProcessCode { get; set; }   // COLUMN_8
-    }
-
 }
