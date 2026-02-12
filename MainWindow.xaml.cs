@@ -45,7 +45,11 @@ namespace PrintLogPdf3
             Title = $"Batch PDF Generator - Login: {_currentUserId}";
             LoginInfoText.Text = $"Logged in as: {_currentUserId} ({_currentUserRole})";
             LoadBatchList();
+
+            
         }
+
+        
 
         private void LoadBatchList()
         {
@@ -213,19 +217,20 @@ namespace PrintLogPdf3
                     return;
                 }
 
-                //여기서 PDF 메모리 생성
-                var pdfBytes = await ExportAllBatchesToMemoryAsync(new List<BatchRange> { batch });
+                // 🔹 이미지 생성
+                var images = await RenderPreviewImagesAsync(
+                    new List<BatchRange> { batch });
 
-                var viewer = new ViewerWindow(pdfBytes);
-                viewer.ShowDialog();
+                // 🔹 미리보기 창 열기
+                var previewWindow = new PreviewWindow(images);
+                previewWindow.Owner = this;
+                previewWindow.ShowDialog();
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.ToString(), "VIEW ERROR");
             }
         }
-
-
 
         private void OnCloseClick(object sender, RoutedEventArgs e)
         {
@@ -926,18 +931,22 @@ namespace PrintLogPdf3
             document.GeneratePdf(pdfPath);
         }
 
-        public async Task<byte[]> ExportAllBatchesToMemoryAsync(List<BatchRange> batches)
+        public async Task<List<byte[]>> RenderPreviewImagesAsync(List<BatchRange> batches)
         {
             return await Task.Run(() =>
             {
                 var document = CreateBatchForm(batches);
 
-                using var stream = new MemoryStream();
-                document.GeneratePdf(stream);
+                var settings = new ImageGenerationSettings
+                {
+                    ImageFormat = ImageFormat.Png,
+                    RasterDpi = 144   // 터치PC 기준 적당
+                };
 
-                return stream.ToArray();
+                return document.GenerateImages(settings).ToList();
             });
         }
+
 
 
         public class BatchRange

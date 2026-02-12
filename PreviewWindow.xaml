@@ -1,0 +1,14 @@
+<Window x:Class="PrintLogPdf3.PreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Preview"
+        WindowState="Maximized">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+
+        <StackPanel x:Name="PreviewPanel"
+                    HorizontalAlignment="Center"/>
+
+    </ScrollViewer>
+</Window>
