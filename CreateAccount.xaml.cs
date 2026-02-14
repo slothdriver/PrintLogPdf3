@@ -61,7 +61,7 @@ namespace PrintLogPdf3
 
                 cmd.Parameters.AddWithValue("@id", id);
                 cmd.Parameters.AddWithValue("@hash", hash);
-                cmd.Parameters.AddWithValue("@role", "OPERATOR");
+                cmd.Parameters.AddWithValue("@role", "user");
                 cmd.Parameters.AddWithValue(
                     "@created",
                     DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));

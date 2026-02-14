@@ -46,7 +46,11 @@ namespace PrintLogPdf3
             LoginInfoText.Text = $"Logged in as: {_currentUserId} ({_currentUserRole})";
             LoadBatchList();
 
-            
+            if (_currentUserRole == "admin")
+            {
+                NextButton.Visibility = Visibility.Collapsed;
+                ApproveButton.Visibility = Visibility.Visible;
+            }
         }
 
         
@@ -70,17 +74,55 @@ namespace PrintLogPdf3
             {
                 _selectedBatch = batch;
 
-                NextButton.IsEnabled = true;
-                NextButton.Background = new SolidColorBrush(MediaColors.Green);
-                NextButton.Foreground = new SolidColorBrush(MediaColors.White);
+                if (_currentUserRole == "admin")
+                {
+                    // 결재요청된 & 아직 미승인 batch만 승인 가능
+                    bool canApprove = batch.IsRequested && !batch.IsApproved;
+                    ApproveButton.IsEnabled = canApprove;
+                    ApproveButton.Background = canApprove
+                        ? new SolidColorBrush(MediaColors.Green)
+                        : new SolidColorBrush(MediaColors.LightGray);
+                    ApproveButton.Foreground = canApprove
+                        ? new SolidColorBrush(MediaColors.White)
+                        : new SolidColorBrush(MediaColors.Black);
+
+                    // 승인완료된 batch → 미리보기/저장 표시
+                    if (batch.IsApproved)
+                    {
+                        PreviewButton.Visibility = Visibility.Visible;
+                        SaveButton.Visibility = Visibility.Visible;
+                    }
+                    else
+                    {
+                        PreviewButton.Visibility = Visibility.Collapsed;
+                        SaveButton.Visibility = Visibility.Collapsed;
+                    }
+                }
+                else
+                {
+                    NextButton.IsEnabled = true;
+                    NextButton.Background = new SolidColorBrush(MediaColors.Green);
+                    NextButton.Foreground = new SolidColorBrush(MediaColors.White);
+                }
             }
             else
             {
                 _selectedBatch = null;
 
-                NextButton.IsEnabled = false;
-                NextButton.Background = new SolidColorBrush(MediaColors.LightGray);
-                NextButton.Foreground = new SolidColorBrush(MediaColors.Black);
+                if (_currentUserRole == "admin")
+                {
+                    ApproveButton.IsEnabled = false;
+                    ApproveButton.Background = new SolidColorBrush(MediaColors.LightGray);
+                    ApproveButton.Foreground = new SolidColorBrush(MediaColors.Black);
+                    PreviewButton.Visibility = Visibility.Collapsed;
+                    SaveButton.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    NextButton.IsEnabled = false;
+                    NextButton.Background = new SolidColorBrush(MediaColors.LightGray);
+                    NextButton.Foreground = new SolidColorBrush(MediaColors.Black);
+                }
             }
         }
 
@@ -95,9 +137,17 @@ namespace PrintLogPdf3
 
             BackButton.Visibility = Visibility.Visible;
             NextButton.Visibility = Visibility.Collapsed;
-            OnView.Visibility = Visibility.Visible;
 
-            OnView.IsEnabled = true; //체크 여부와 무관
+            if (_selectedBatch.IsRequested)
+            {
+                ApprovalButton.Visibility = Visibility.Collapsed;
+                PreviewButton.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                ApprovalButton.Visibility = Visibility.Visible;
+                PreviewButton.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void BackButton_Click(object sender, RoutedEventArgs e)
@@ -107,7 +157,8 @@ namespace PrintLogPdf3
 
             BackButton.Visibility = Visibility.Collapsed;
             NextButton.Visibility = Visibility.Visible;
-            OnView.Visibility = Visibility.Collapsed;
+            ApprovalButton.Visibility = Visibility.Collapsed;
+            PreviewButton.Visibility = Visibility.Collapsed;
 
             //batch 선택 무효화 
             BatchListView.SelectedItem = null;
@@ -207,7 +258,7 @@ namespace PrintLogPdf3
             }
         }
 
-        private async void OnViewClick(object sender, RoutedEventArgs e)
+        private void OnRequestClick(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -217,11 +268,46 @@ namespace PrintLogPdf3
                     return;
                 }
 
-                // 🔹 이미지 생성
+                bool check1 = Check1.IsChecked == true;
+                bool check2 = Check2.IsChecked == true;
+                bool check3 = Check3.IsChecked == true;
+
+                try
+                {
+                    InsertApprovalRequest(batch, check1, check2, check3);
+                    MessageBox.Show("결재요청 완료");
+                    LoadBatchList();
+
+                    // 버튼 전환: 결재요청 숨김, 미리보기 표시
+                    ApprovalButton.Visibility = Visibility.Collapsed;
+                    PreviewButton.Visibility = Visibility.Visible;
+                }
+                catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
+                {
+                    MessageBox.Show("이미 결재요청된 Batch입니다.", "중복 요청 불가");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "FATAL ERROR");
+            }
+        }
+
+        private async void OnPreviewClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_selectedBatch is not BatchRange batch)
+                {
+                    MessageBox.Show("Batch가 선택되지 않았습니다.", "알림");
+                    return;
+                }
+
+                // 이미지 생성
                 var images = await RenderPreviewImagesAsync(
                     new List<BatchRange> { batch });
 
-                // 🔹 미리보기 창 열기
+                // 미리보기 창 열기
                 var previewWindow = new PreviewWindow(images);
                 previewWindow.Owner = this;
                 previewWindow.ShowDialog();
@@ -229,6 +315,83 @@ namespace PrintLogPdf3
             catch (Exception ex)
             {
                 MessageBox.Show(ex.ToString(), "VIEW ERROR");
+            }
+        }
+
+        private void OnApproveClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_selectedBatch is not BatchRange batch)
+                {
+                    MessageBox.Show("Batch가 선택되지 않았습니다.", "알림");
+                    return;
+                }
+
+                using var con = new SqliteConnection($"Data Source={approvalLogDbPath}");
+                con.Open();
+
+                using var cmd = con.CreateCommand();
+                cmd.CommandText = @"
+                    UPDATE ApprovalLog
+                    SET approval_time = @approveTime
+                    WHERE start_time = @start
+                      AND end_time   = @end
+                      AND approval_time IS NULL;
+                ";
+                cmd.Parameters.AddWithValue("@approveTime", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
+                cmd.Parameters.AddWithValue("@start", batch.Start.ToString("yyyy-MM-dd HH:mm:ss"));
+                cmd.Parameters.AddWithValue("@end", batch.End.ToString("yyyy-MM-dd HH:mm:ss"));
+
+                int affected = cmd.ExecuteNonQuery();
+
+                if (affected > 0)
+                {
+                    MessageBox.Show("결재승인 완료", "승인");
+                    LoadBatchList();
+                    ApproveButton.IsEnabled = false;
+                    ApproveButton.Background = new SolidColorBrush(MediaColors.LightGray);
+                    ApproveButton.Foreground = new SolidColorBrush(MediaColors.Black);
+                }
+                else
+                {
+                    MessageBox.Show("이미 승인되었거나 요청이 없는 Batch입니다.", "알림");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "FATAL ERROR");
+            }
+        }
+
+        private readonly string pdfSaveDir = @"C:\Users\acatu\Documents\batchpdf";
+
+        private void OnSaveClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_selectedBatch is not BatchRange batch)
+                {
+                    MessageBox.Show("Batch가 선택되지 않았습니다.", "알림");
+                    return;
+                }
+
+                Directory.CreateDirectory(pdfSaveDir);
+                var fileName = $"Batch_{batch.Index}_{batch.Start:yyyyMMdd_HHmmss}.pdf";
+                var fullPath = Path.Combine(pdfSaveDir, fileName);
+
+                if (File.Exists(fullPath))
+                {
+                    MessageBox.Show("이미 저장된 Batch입니다.", "중복 저장 불가");
+                    return;
+                }
+
+                ExportAllBatchesToFile(new List<BatchRange> { batch }, fullPath);
+                MessageBox.Show($"PDF 저장 완료\n{fullPath}", "저장");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "SAVE ERROR");
             }
         }
 
@@ -961,7 +1124,7 @@ namespace PrintLogPdf3
 
             // ListView 표기용(원하면)
             public string RequestStatus => IsRequested ? "Requested" : "-";
-            public string ApproveStatus => IsApproved ? "Approved" : "-";
+            public string ApproveStatus => IsApproved ? "승인완료" : "-";
 
             public string DisplayName =>
                 $"Batch {Index} ({Start:yyyy-MM-dd HH:mm:ss} ~ {End:yyyy-MM-dd HH:mm:ss})";

@@ -26,11 +26,12 @@ namespace PrintLogPdf3
                 PreviewPanel.Children.Add(new Image
                 {
                     Source = bitmap,
-                    Margin = new Thickness(20),
+                    Margin = new Thickness(10),
                     Stretch = System.Windows.Media.Stretch.Uniform,
-                    Width = 800   // 화면에 맞춰 조정 가능
+                    Width = 600
                 });
             }
         }
+
     }
 }

@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Batch PDF Generator"
         Height="400"
-        Width="520"
+        Width="700"
         WindowStartupLocation="CenterScreen">
 
     <Grid Margin="20">
@@ -42,7 +42,7 @@
 
                 <!-- Batch 시간 -->
                 <GridViewColumn Header="Batch"
-                                Width="300"
+                                Width="410"
                                 DisplayMemberBinding="{Binding DisplayName}" />
 
                 <!-- 결재 요청 여부 -->
@@ -110,12 +110,37 @@
                 Click="NextButton_Click"
                 IsEnabled="False"/>
 
-        <Button x:Name="OnView"
-                Content="열기"
+        <Button x:Name="ApprovalButton"
+                Content="결재요청"
                 Width="120"
                 Height="40"
                 Margin="0,0,10,0"
-                Click="OnViewClick"
+                Click="OnRequestClick"
+                Visibility="Collapsed"/>
+
+        <Button x:Name="PreviewButton"
+                Content="미리보기"
+                Width="120"
+                Height="40"
+                Margin="0,0,10,0"
+                Click="OnPreviewClick"
+                Visibility="Collapsed"/>
+
+        <Button x:Name="ApproveButton"
+                Content="결재승인"
+                Width="120"
+                Height="40"
+                Margin="0,0,10,0"
+                Click="OnApproveClick"
+                Visibility="Collapsed"
+                IsEnabled="False"/>
+
+        <Button x:Name="SaveButton"
+                Content="저장"
+                Width="120"
+                Height="40"
+                Margin="0,0,10,0"
+                Click="OnSaveClick"
                 Visibility="Collapsed"/>
 
         <Button Content="닫기"
