@@ -4,7 +4,10 @@
         Title="Batch PDF Generator"
         Height="400"
         Width="700"
-        WindowStartupLocation="CenterScreen">
+        WindowStartupLocation="CenterScreen"
+        Topmost="True"
+        ResizeMode="NoResize"
+        StateChanged="Window_StateChanged">
 
     <Grid Margin="20">
     <Grid.RowDefinitions>
@@ -67,22 +70,51 @@
                 FontWeight="Bold"
                 Visibility="Collapsed">
 
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="10">
                 <CheckBox x:Name="Check1"
                         Content="승인되지 않은 사용자 변경이 있습니까? 변경 사유 기입"
                         FontSize="14"
-                        Margin="0,5"/>
+                        Margin="0,5"
+                        Checked="OnCheckChanged" Unchecked="OnCheckChanged"/>
+                <TextBox x:Name="Reason1"
+                        Visibility="Collapsed"
+                        Margin="20,2,0,5"
+                        FontSize="13"
+                        FontWeight="Normal"
+                        AcceptsReturn="True"
+                        TextWrapping="Wrap"
+                        Height="50"/>
 
                 <CheckBox x:Name="Check2"
                         Content="알람이 발생했습니까? 알람 발생후 조치 내용 기입"
                         FontSize="14"
-                        Margin="0,5"/>
+                        Margin="0,5"
+                        Checked="OnCheckChanged" Unchecked="OnCheckChanged"/>
+                <TextBox x:Name="Reason2"
+                        Visibility="Collapsed"
+                        Margin="20,2,0,5"
+                        FontSize="13"
+                        FontWeight="Normal"
+                        AcceptsReturn="True"
+                        TextWrapping="Wrap"
+                        Height="50"/>
 
                 <CheckBox x:Name="Check3"
                         Content="자동운전의 설정값을 변경한 적이 있습니까? 변경 이유 기입"
                         FontSize="14"
-                        Margin="0,5"/>
+                        Margin="0,5"
+                        Checked="OnCheckChanged" Unchecked="OnCheckChanged"/>
+                <TextBox x:Name="Reason3"
+                        Visibility="Collapsed"
+                        Margin="20,2,0,5"
+                        FontSize="13"
+                        FontWeight="Normal"
+                        AcceptsReturn="True"
+                        TextWrapping="Wrap"
+                        Height="50"/>
             </StackPanel>
+            </ScrollViewer>
         </GroupBox>
 
     </Grid>
@@ -123,6 +155,7 @@
                 Width="120"
                 Height="40"
                 Margin="0,0,10,0"
+                Background="#bbeea4"
                 Click="OnPreviewClick"
                 Visibility="Collapsed"/>
 

@@ -60,8 +60,6 @@ namespace PrintLogPdf3
             var batches = LoadBatches()
                 .OrderBy(b => b.Start)
                 .ToList();
-            MessageBox.Show($"Batches count = {batches.Count}"); 
-
             for (int i = 0; i < batches.Count; i++)
                 batches[i].Index = i + 1;
             MergeApprovalStatus(batches);
@@ -154,6 +152,7 @@ namespace PrintLogPdf3
         {
             ChecklistPanel.Visibility = Visibility.Collapsed;
             BatchSelectPanel.Visibility = Visibility.Visible;
+            LoadBatchList();
 
             BackButton.Visibility = Visibility.Collapsed;
             NextButton.Visibility = Visibility.Visible;
@@ -165,14 +164,44 @@ namespace PrintLogPdf3
             _selectedBatch = null;
             NextButton.IsEnabled = false;
 
-            //체크도 초기화
+            //체크, 사유 초기화
             Check1.IsChecked = false;
             Check2.IsChecked = false;
             Check3.IsChecked = false;
+            Reason1.Text = "";
+            Reason2.Text = "";
+            Reason3.Text = "";
+            Reason1.Visibility = Visibility.Collapsed;
+            Reason2.Visibility = Visibility.Collapsed;
+            Reason3.Visibility = Visibility.Collapsed;
             NextButton.Background = new SolidColorBrush(MediaColors.LightGray);
             NextButton.Foreground = new SolidColorBrush(MediaColors.Black);
 
         }
+        private void OnCheckChanged(object sender, RoutedEventArgs e)
+        {
+            if (sender is CheckBox cb)
+            {
+                TextBox? target = cb.Name switch
+                {
+                    "Check1" => Reason1,
+                    "Check2" => Reason2,
+                    "Check3" => Reason3,
+                    _ => null
+                };
+
+                if (target != null)
+                {
+                    target.Visibility = cb.IsChecked == true
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+
+                    if (cb.IsChecked != true)
+                        target.Text = "";
+                }
+            }
+        }
+
         private void EnsureApprovalLogDb()
         {
             Directory.CreateDirectory(Path.GetDirectoryName(approvalLogDbPath)!);
@@ -193,12 +222,17 @@ namespace PrintLogPdf3
                 check1         INTEGER NOT NULL,
                 check2         INTEGER NOT NULL,
                 check3         INTEGER NOT NULL,
+                reason1        TEXT NOT NULL DEFAULT '해당없음',
+                reason2        TEXT NOT NULL DEFAULT '해당없음',
+                reason3        TEXT NOT NULL DEFAULT '해당없음',
 
                 UNIQUE(start_time, end_time)
             );";
             cmd.ExecuteNonQuery();
         }
-        private void InsertApprovalRequest(BatchRange batch, bool check1, bool check2, bool check3)
+        private void InsertApprovalRequest(BatchRange batch,
+            bool check1, bool check2, bool check3,
+            string reason1, string reason2, string reason3)
         {
             using var con = new SqliteConnection($"Data Source={approvalLogDbPath}");
             con.Open();
@@ -206,9 +240,11 @@ namespace PrintLogPdf3
             using var cmd = con.CreateCommand();
             cmd.CommandText = @"
             INSERT INTO ApprovalLog
-            (start_time, end_time, request_time, request_user, approval_time, check1, check2, check3)
+            (start_time, end_time, request_time, request_user, approval_time,
+             check1, check2, check3, reason1, reason2, reason3)
             VALUES
-            (@start, @end, @reqTime, @user, NULL, @c1, @c2, @c3);
+            (@start, @end, @reqTime, @user, NULL,
+             @c1, @c2, @c3, @r1, @r2, @r3);
             ";
 
             cmd.Parameters.AddWithValue("@start", batch.Start.ToString("yyyy-MM-dd HH:mm:ss"));
@@ -218,46 +254,12 @@ namespace PrintLogPdf3
             cmd.Parameters.AddWithValue("@c1", check1 ? 1 : 0);
             cmd.Parameters.AddWithValue("@c2", check2 ? 1 : 0);
             cmd.Parameters.AddWithValue("@c3", check3 ? 1 : 0);
+            cmd.Parameters.AddWithValue("@r1", check1 ? reason1 : "해당없음");
+            cmd.Parameters.AddWithValue("@r2", check2 ? reason2 : "해당없음");
+            cmd.Parameters.AddWithValue("@r3", check3 ? reason3 : "해당없음");
 
             cmd.ExecuteNonQuery();
         }
-
-        private void OnGenerateClick(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                if (!File.Exists(systemLogDbPath))
-                {
-                    MessageBox.Show("DB 파일 없음:\n" + systemLogDbPath, "ERROR");
-                    return;
-                }
-
-                if (_selectedBatch is not BatchRange batch)
-                {
-                    MessageBox.Show("Batch가 선택되지 않았습니다.", "알림");
-                    return;
-                }
-
-                bool check1 = Check1.IsChecked == true;
-                bool check2 = Check2.IsChecked == true;
-                bool check3 = Check3.IsChecked == true;
-
-                try
-                {
-                    InsertApprovalRequest(batch, check1, check2, check3);
-                    MessageBox.Show("Data 저장 완료");
-                }
-                catch (SqliteException ex) when (ex.SqliteErrorCode == 19)
-                {
-                    MessageBox.Show("이미 저장된 Batch입니다.", "중복 저장 불가");
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.ToString(), "FATAL ERROR");
-            }
-        }
-
         private void OnRequestClick(object sender, RoutedEventArgs e)
         {
             try
@@ -272,11 +274,20 @@ namespace PrintLogPdf3
                 bool check2 = Check2.IsChecked == true;
                 bool check3 = Check3.IsChecked == true;
 
+                // 체크된 항목에 사유 미입력 검증
+                if ((check1 && string.IsNullOrWhiteSpace(Reason1.Text)) ||
+                    (check2 && string.IsNullOrWhiteSpace(Reason2.Text)) ||
+                    (check3 && string.IsNullOrWhiteSpace(Reason3.Text)))
+                {
+                    MessageBox.Show("체크 항목에 대한 사유를 입력하세요.", "입력 필요");
+                    return;
+                }
+
                 try
                 {
-                    InsertApprovalRequest(batch, check1, check2, check3);
+                    InsertApprovalRequest(batch, check1, check2, check3,
+                        Reason1.Text.Trim(), Reason2.Text.Trim(), Reason3.Text.Trim());
                     MessageBox.Show("결재요청 완료");
-                    LoadBatchList();
 
                     // 버튼 전환: 결재요청 숨김, 미리보기 표시
                     ApprovalButton.Visibility = Visibility.Collapsed;
@@ -393,6 +404,12 @@ namespace PrintLogPdf3
             {
                 MessageBox.Show(ex.ToString(), "SAVE ERROR");
             }
+        }
+
+        private void Window_StateChanged(object sender, EventArgs e)
+        {
+            if (WindowState == WindowState.Minimized)
+                WindowState = WindowState.Normal;
         }
 
         private void OnCloseClick(object sender, RoutedEventArgs e)
@@ -519,6 +536,50 @@ namespace PrintLogPdf3
                     batch.IsApproved  = false;
                 }
             }
+        }
+
+        private ApprovalInfo? LoadApprovalInfo(BatchRange batch)
+        {
+            if (!File.Exists(approvalLogDbPath))
+                return null;
+
+            using var con = new SqliteConnection($"Data Source={approvalLogDbPath}");
+            con.Open();
+
+            using var cmd = con.CreateCommand();
+            cmd.CommandText = @"
+                SELECT request_user, request_time, approval_time,
+                       check1, check2, check3, reason1, reason2, reason3
+                FROM ApprovalLog
+                WHERE start_time = @start
+                  AND end_time   = @end
+                LIMIT 1;
+            ";
+
+            cmd.Parameters.AddWithValue("@start",
+                batch.Start.ToString("yyyy-MM-dd HH:mm:ss"));
+            cmd.Parameters.AddWithValue("@end",
+                batch.End.ToString("yyyy-MM-dd HH:mm:ss"));
+
+            using var reader = cmd.ExecuteReader();
+
+            if (!reader.Read())
+                return null;
+
+            return new ApprovalInfo
+            {
+                RequestUser  = reader["request_user"]?.ToString() ?? "",
+                RequestTime  = reader["request_time"]?.ToString() ?? "",
+                ApprovalTime = reader["approval_time"] == DBNull.Value
+                    ? null
+                    : reader["approval_time"]?.ToString(),
+                Check1 = Convert.ToInt32(reader["check1"]) == 1,
+                Check2 = Convert.ToInt32(reader["check2"]) == 1,
+                Check3 = Convert.ToInt32(reader["check3"]) == 1,
+                Reason1 = reader["reason1"]?.ToString() ?? "해당없음",
+                Reason2 = reader["reason2"]?.ToString() ?? "해당없음",
+                Reason3 = reader["reason3"]?.ToString() ?? "해당없음",
+            };
         }
 
         private List<SystemLogRow> LoadRowsInBatch(BatchRange batch)
@@ -980,6 +1041,7 @@ namespace PrintLogPdf3
                 {
                     var rows = LoadRowsInBatch(batch);
                     var alarmRows = LoadAlarmRowsInBatch(batch);
+                    var approval = LoadApprovalInfo(batch);
 
                     container.Page(page =>
                     {
@@ -994,6 +1056,49 @@ namespace PrintLogPdf3
                         page.Content().Column(col =>
                         {
                             col.Spacing(15);
+
+                            // 결재 정보
+                            if (approval != null)
+                            {
+                                col.Item().Text("결재 정보")
+                                    .FontSize(12)
+                                    .Bold();
+
+                                col.Item().Table(table =>
+                                {
+                                    table.ColumnsDefinition(c =>
+                                    {
+                                        c.ConstantColumn(120);
+                                        c.RelativeColumn();
+                                    });
+
+                                    table.Cell().Text("요청자").Bold();
+                                    table.Cell().Text(approval.RequestUser);
+
+                                    table.Cell().Text("요청 시간").Bold();
+                                    table.Cell().Text(approval.RequestTime);
+
+                                    table.Cell().Text("승인 시간").Bold();
+                                    table.Cell().Text(approval.ApprovalTime ?? "미승인");
+                                });
+
+                                col.Item().PaddingTop(5).Column(chk =>
+                                {
+                                    chk.Item().Text($"{(approval.Check1 ? "☑" : "☐")} 승인되지 않은 사용자 변경이 있습니까? 변경 사유 기입");
+                                    if (approval.Check1)
+                                        chk.Item().PaddingLeft(20).Text($"사유: {approval.Reason1}").FontSize(10).Italic();
+
+                                    chk.Item().Text($"{(approval.Check2 ? "☑" : "☐")} 알람이 발생했습니까? 알람 발생후 조치 내용 기입");
+                                    if (approval.Check2)
+                                        chk.Item().PaddingLeft(20).Text($"사유: {approval.Reason2}").FontSize(10).Italic();
+
+                                    chk.Item().Text($"{(approval.Check3 ? "☑" : "☐")} 자동운전의 설정값을 변경한 적이 있습니까? 변경 이유 기입");
+                                    if (approval.Check3)
+                                        chk.Item().PaddingLeft(20).Text($"사유: {approval.Reason3}").FontSize(10).Italic();
+                                });
+
+                                col.Item().PaddingTop(10);
+                            }
 
                             // System Log
                             col.Item().Text("System Log")
@@ -1067,7 +1172,6 @@ namespace PrintLogPdf3
                             }
                                 col.Item().PageBreak();
                                 ComposeBatchGlobalLogGraph(col, batch);
-                                col.Item().PageBreak();
        
                         });
                             page.Footer()
@@ -1133,6 +1237,19 @@ namespace PrintLogPdf3
         }
 
 
+
+        class ApprovalInfo
+        {
+            public string RequestUser = "";
+            public string RequestTime = "";
+            public string? ApprovalTime;
+            public bool Check1;
+            public bool Check2;
+            public bool Check3;
+            public string Reason1 = "해당없음";
+            public string Reason2 = "해당없음";
+            public string Reason3 = "해당없음";
+        }
 
         class SystemLogRow
         {
