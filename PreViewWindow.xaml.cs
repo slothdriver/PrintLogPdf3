@@ -23,12 +23,16 @@ namespace PrintLogPdf3
                 bitmap.EndInit();
                 bitmap.Freeze();
 
+                double displayWidth = 700;
+                double displayHeight = displayWidth * bitmap.PixelHeight / bitmap.PixelWidth;
+
                 PreviewPanel.Children.Add(new Image
                 {
                     Source = bitmap,
                     Margin = new Thickness(10),
                     Stretch = System.Windows.Media.Stretch.Uniform,
-                    Width = 600
+                    Width = displayWidth,
+                    Height = displayHeight
                 });
             }
         }

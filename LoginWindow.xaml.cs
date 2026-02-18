@@ -1,5 +1,6 @@
 using Microsoft.Data.Sqlite;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
@@ -109,6 +110,32 @@ namespace PrintLogPdf3
         {
             var win = new CreateAccount();
             win.ShowDialog();
+        }
+
+        private void OnInputGotFocus(object sender, RoutedEventArgs e)
+        {
+            ShowTouchKeyboard();
+        }
+
+        private void ShowTouchKeyboard()
+        {
+            try
+            {
+                foreach (var proc in Process.GetProcessesByName("TabTip"))
+                {
+                    proc.Kill();
+                    proc.WaitForExit(500);
+                }
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = @"C:\Program Files\Common Files\Microsoft Shared\ink\TabTip.exe",
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                // 터치PC가 아니거나 TabTip 없는 경우 무시
+            }
         }
     }
 }

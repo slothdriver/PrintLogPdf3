@@ -1,23 +1,31 @@
-##### 구현해야할 것
+#### Need to know
+경로(회사)
+C:\Program Files (x86)\M2I Corp\TOP Design Studio\SCADA\Database\SystemLog\SystemLog.db
+C:\Program Files (x86)\M2I Corp\TOP Design Studio\SCADA\Database\Alarm\GlobalAlarm.db
+C:\SystemLog\SystemLog.db
+C:\Alarm\GlobalAlarm.db
+
+USB이동 설치용 명령
+dotnet publish -c Release -r win-x64 --self-contained true
+
+git사용 명령
+git init 이 폴더 관리하겠다고 선언하는 명령어. 현재 폴더 안에 .git/폴더가 생김. 이 폴더가 생기는 시점부터 관리시작. 
+git commit -m "" //특정 시점을 스냅샷에 추가, m에 commit 관련 내용 메모.
+git add //현재 상태를 다음 스냅샷에 포함.
+git log --oneline //과거시점 메모 출력
+git push //내 pc에 저장된 커밋들을 서버에 업로드
+git pull //서버의 최신코드를 내 pc로 가져오기.
+git checkout 9bc21d -- Form1.cs //특정 커밋으로 파일 하나만 복구.
+git status //수정된 파일
+              //add된 파일
+             //commint안한 변경 등 현재상태 출력
+git config --global user.name "acatundercar" //commit시에 어떤 user이름으로 할것이냐?
 
 
 
-* history.db 생성 -> 실행시 db 파일불러서 출력날짜, 작성자, 결재자 표시.
-* 특정 batch의 문서생성여부/결재여부 저장할 db 
-* pdfium을 이용해서 가벼운 viewer 제작(viewer자체에 승인, 결재 기능 내장)
-* 체크리스트 작성(설정변경? 사용자변경? 변경사유입력창, 알람 조치 내용 등)
-* Data Row 단순출력은 안됨. dbbrower보면 데이터 더럽게 나옴. 보기좋게 표로 가공해야됨.
-* 출력할 batch 선택시 checklist box로 넘어가야 됨.
-* 뒤로가기 누르면 이전에 했던 batch선택은 무효가 되어야 됨. 다시 batch 선택시 checklist로 넘어감
-* "보기" 누르면 렌더링만, 결재요청 눌러야 저장(최종 승인자가 승인이 끝나야 저장)
 
 
 
-#### Viewer에 있어야할 버튼들
-
-1. 닫기 : ㅅㅂ이걸 설명해야 되냐
-2. 결재요청 : pdf에 작성자 이름넣기
-3. 결재승인 : 승인자 이름 넣기(이전까지는 렌더링만 하다가 결재요청시 pdf 생성)
 
 
 

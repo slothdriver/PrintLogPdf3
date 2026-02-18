@@ -1,13 +1,13 @@
-﻿<Window x:Class="PrintLogPdf3.MainWindow"
-        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Batch PDF Generator"
-        Height="400"
-        Width="700"
-        WindowStartupLocation="CenterScreen"
-        Topmost="True"
-        ResizeMode="NoResize"
-        StateChanged="Window_StateChanged">
+<Window x:Class="PrintLogPdf3.MainWindow"
+       xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+       Title="Batch PDF Generator"
+       Height="400"
+       Width="700"
+       WindowStartupLocation="CenterScreen"
+       Topmost="True"
+       ResizeMode="NoResize"
+       StateChanged="Window_StateChanged">
 
     <Grid Margin="20">
     <Grid.RowDefinitions>
@@ -15,7 +15,7 @@
         <RowDefinition Height="*"/>      <!-- Batch List -->
         <RowDefinition Height="Auto"/>   <!-- Buttons -->
     </Grid.RowDefinitions>
-        
+
         <Border Grid.Row="0"
                 Background="#F2F2F2"
                 Padding="8"
@@ -84,7 +84,8 @@
                         FontWeight="Normal"
                         AcceptsReturn="True"
                         TextWrapping="Wrap"
-                        Height="50"/>
+                        Height="50"
+                        GotFocus="OnInputGotFocus"/>
 
                 <CheckBox x:Name="Check2"
                         Content="알람이 발생했습니까? 알람 발생후 조치 내용 기입"
@@ -98,7 +99,8 @@
                         FontWeight="Normal"
                         AcceptsReturn="True"
                         TextWrapping="Wrap"
-                        Height="50"/>
+                        Height="50"
+                        GotFocus="OnInputGotFocus"/>
 
                 <CheckBox x:Name="Check3"
                         Content="자동운전의 설정값을 변경한 적이 있습니까? 변경 이유 기입"
@@ -112,7 +114,8 @@
                         FontWeight="Normal"
                         AcceptsReturn="True"
                         TextWrapping="Wrap"
-                        Height="50"/>
+                        Height="50"
+                        GotFocus="OnInputGotFocus"/>
             </StackPanel>
             </ScrollViewer>
         </GroupBox>

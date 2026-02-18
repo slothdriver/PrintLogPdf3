@@ -14,6 +14,7 @@ using QuestPDF.Helpers;
 using PdfColors = QuestPDF.Helpers.Colors;
 using MediaColors = System.Windows.Media.Colors;
 using System.Linq;
+using System.Diagnostics;
 using System.Threading.Tasks;
 
 
@@ -22,9 +23,9 @@ namespace PrintLogPdf3
 {
     public partial class MainWindow : Window
     {
-        private readonly string systemLogDbPath = @"C:\Database\SystemLog\SystemLog.db";
-        private readonly string alarmLogDbPath = @"C:\Database\Alarm\GlobalAlarm.db";
-        private readonly string globalLogDbPath = @"C:\Database\Logging\GlobalLog.db";
+        private readonly string systemLogDbPath = @"C:\Program Files (x86)\M2I Corp\TOP Design Studio\SCADA\Database\SystemLog\SystemLog.db";
+        private readonly string alarmLogDbPath = @"C:\Program Files (x86)\M2I Corp\TOP Design Studio\SCADA\Database\Alarm\GlobalAlarm.db";
+        private readonly string globalLogDbPath = @"C:\Program Files (x86)\M2I Corp\TOP Design Studio\SCADA\Database\Logging\GlobalLog.db";
         private readonly string approvalLogDbPath = @"C:\Database\ApprovalLog\ApprovalLog.db";
 
         private readonly string _currentUserId;
@@ -417,6 +418,32 @@ namespace PrintLogPdf3
             Close();
         }
 
+        private void OnInputGotFocus(object sender, RoutedEventArgs e)
+        {
+            ShowTouchKeyboard();
+        }
+
+        private void ShowTouchKeyboard()
+        {
+            try
+            {
+                foreach (var proc in Process.GetProcessesByName("TabTip"))
+                {
+                    proc.Kill();
+                    proc.WaitForExit(500);
+                }
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = @"C:\Program Files\Common Files\Microsoft Shared\ink\TabTip.exe",
+                    UseShellExecute = true
+                });
+            }
+            catch
+            {
+                // 터치PC가 아니거나 TabTip 없는 경우 무시
+            }
+        }
+
         private List<BatchRange> LoadBatches()
         {
             var StartEnds = new List<(DateTime Time, bool IsStart, bool IsEnd)>();
@@ -674,7 +701,7 @@ namespace PrintLogPdf3
                 rows.Add(new AlarmLogRow
                 {
                     Time = occurDt,
-                    Msg = $"AlarmID: {alarmId} / Recovery: {recovery}"
+                    Msg = $"{alarmId} / Recovery: {recovery}"
                 });
             }
 
@@ -746,7 +773,7 @@ namespace PrintLogPdf3
         }
 
 
-        private string BuildGlobalLogSvg(List<GlobalLogPoint> points, int width = 600, int height = 400)
+        private string BuildGlobalLogSvg(List<GlobalLogPoint> points, int width = 600, int height = 400, int seriesIndex = 0)
         {
             if (points.Count == 0)
                 return "";
@@ -763,19 +790,21 @@ namespace PrintLogPdf3
             int plotBottom = height - marginBottom;
             int plotRight = width;
 
-            double yStep = 50;
+            double yStep = seriesIndex switch
+            {
+                2 => 5,   // Temperature: 5마다
+                1 => 10,  // Humidity: 10마다
+                _ => 50   // Pressure: 기존 유지
+            };
 
-            double minVal = points.Min(p =>
-                Math.Min(
-                    p.Column1,
-                    Math.Min(p.Column2 / 10.0, p.Column3)
-                ));
+            Func<GlobalLogPoint, double> seriesSel = seriesIndex switch
+            {
+                1 => p => p.Column2 / 10.0,
+                2 => p => p.Column3 / 10.0,
+                _ => p => p.Column1
+            };
 
-            double maxVal = points.Max(p =>
-                Math.Max(
-                    p.Column1,
-                    Math.Max(p.Column2 / 10.0, p.Column3)
-                ));
+            double maxVal = points.Max(seriesSel);
 
             // y는 절대 음수로 안 내려감
             double paddedMin = 0;
@@ -846,9 +875,13 @@ namespace PrintLogPdf3
                     $"stroke-width='1' points='{pts}' />");
             }
 
-            DrawPolyline(p => p.Column1, "#E53935");
-            DrawPolyline(p => p.Column2 / 10.0, "#FBC02D");
-            DrawPolyline(p => p.Column3, "#1E88E5");
+            var (seriesColor, seriesSelector) = seriesIndex switch
+            {
+                1 => ("#FBC02D", (Func<GlobalLogPoint, double>)(p => p.Column2 / 10.0)),
+                2 => ("#1E88E5", (Func<GlobalLogPoint, double>)(p => p.Column3 / 10.0)),
+                _ => ("#E53935", (Func<GlobalLogPoint, double>)(p => p.Column1))
+            };
+            DrawPolyline(seriesSelector, seriesColor);
 
             // X축 = y = 0 (유일한 x축)
             var yZero = Y(0);
@@ -976,19 +1009,12 @@ namespace PrintLogPdf3
         }
 
 
-        private void ComposeBatchGlobalLogGraph(ColumnDescriptor col,BatchRange batch)
+        private void ComposeBatchGlobalLogGraph(ColumnDescriptor col, BatchRange batch, int seriesIndex)
         {
             var points = LoadGlobalLogPoints(batch);
 
             col.Item().Column(c =>
             {
-                c.Item().AlignCenter()
-                    .Text($"Batch {batch.Index} - Global Log Trend")
-                    .FontSize(16)
-                    .Bold();
-
-                c.Item().PaddingTop(10);
-
                 if (points.Count == 0)
                 {
                     c.Item()
@@ -1000,7 +1026,7 @@ namespace PrintLogPdf3
                 }
                 else
                 {
-                    var svg = BuildGlobalLogSvg(points);
+                    var svg = BuildGlobalLogSvg(points, seriesIndex: seriesIndex);
 
                     c.Item()
                     .Height(400)
@@ -1048,21 +1074,51 @@ namespace PrintLogPdf3
                         page.Size(PageSizes.A4);
                         page.Margin(20);
 
-                        page.Header()
-                            .Text($"Batch {batch.Index}\n{batch.Start:yyyy-MM-dd HH:mm:ss} ~ {batch.End:yyyy-MM-dd HH:mm:ss}")
-                            .FontSize(14)
-                            .Bold();
-
                         page.Content().Column(col =>
                         {
-                            col.Spacing(15);
+                            // 제목 (첫 페이지에만)
+                            col.Item()
+                                .PaddingBottom(6)
+                                .Text("Isolator Batch Process Record")
+                                .FontSize(16)
+                                .Bold();
+
+                            // 두꺼운 초록색 라인
+                            col.Item()
+                                .Height(3)
+                                .Background("#2E7D32");
+
+                            col.Item().Height(20);
+
+                            // 하늘색 상단 라인
+                            col.Item()
+                                .Height(2)
+                                .Background("#4FC3F7");
+
+                            // Batch 정보
+                            col.Item()
+                                .PaddingVertical(6)
+                                .PaddingHorizontal(4)
+                                .Text($"Batch {batch.Index}    {batch.Start:yyyy-MM-dd HH:mm:ss} ~ {batch.End:yyyy-MM-dd HH:mm:ss}")
+                                .FontSize(12);
+
+                            // 하늘색 하단 라인
+                            col.Item()
+                                .Height(2)
+                                .Background("#4FC3F7");
+                            col.Item()
+                                .PaddingBottom(25);
+
 
                             // 결재 정보
                             if (approval != null)
                             {
-                                col.Item().Text("결재 정보")
+                                col.Item()
+                                    .Text("1. 결재 및 승인 정보")
                                     .FontSize(12)
                                     .Bold();
+                                col.Item().PaddingTop(3).LineHorizontal(2);
+                                col.Item().PaddingBottom(10);
 
                                 col.Item().Table(table =>
                                 {
@@ -1072,13 +1128,13 @@ namespace PrintLogPdf3
                                         c.RelativeColumn();
                                     });
 
-                                    table.Cell().Text("요청자").Bold();
+                                    table.Cell().Text("결재요청자").Bold();
                                     table.Cell().Text(approval.RequestUser);
 
-                                    table.Cell().Text("요청 시간").Bold();
+                                    table.Cell().Text("결재요청 시간").Bold();
                                     table.Cell().Text(approval.RequestTime);
 
-                                    table.Cell().Text("승인 시간").Bold();
+                                    table.Cell().Text("결재승인 시간").Bold();
                                     table.Cell().Text(approval.ApprovalTime ?? "미승인");
                                 });
 
@@ -1086,54 +1142,28 @@ namespace PrintLogPdf3
                                 {
                                     chk.Item().Text($"{(approval.Check1 ? "☑" : "☐")} 승인되지 않은 사용자 변경이 있습니까? 변경 사유 기입");
                                     if (approval.Check1)
-                                        chk.Item().PaddingLeft(20).Text($"사유: {approval.Reason1}").FontSize(10).Italic();
+                                        chk.Item().PaddingLeft(20).Text($"사유: {approval.Reason1}").FontSize(11).Italic();
 
                                     chk.Item().Text($"{(approval.Check2 ? "☑" : "☐")} 알람이 발생했습니까? 알람 발생후 조치 내용 기입");
                                     if (approval.Check2)
-                                        chk.Item().PaddingLeft(20).Text($"사유: {approval.Reason2}").FontSize(10).Italic();
+                                        chk.Item().PaddingLeft(20).Text($"사유: {approval.Reason2}").FontSize(11).Italic();
 
                                     chk.Item().Text($"{(approval.Check3 ? "☑" : "☐")} 자동운전의 설정값을 변경한 적이 있습니까? 변경 이유 기입");
                                     if (approval.Check3)
-                                        chk.Item().PaddingLeft(20).Text($"사유: {approval.Reason3}").FontSize(10).Italic();
+                                        chk.Item().PaddingLeft(20).Text($"사유: {approval.Reason3}").FontSize(11).Italic();
                                 });
 
                                 col.Item().PaddingTop(10);
                             }
-
-                            // System Log
-                            col.Item().Text("System Log")
-                                .FontSize(12)
-                                .Bold();
-
-                            col.Item().Table(table =>
-                            {
-                                table.ColumnsDefinition(c =>
-                                {
-                                    c.ConstantColumn(160);
-                                    c.RelativeColumn();
-                                });
-
-                                table.Header(h =>
-                                {
-                                    h.Cell().Text("Time").Bold();
-                                    h.Cell().Text("Message").Bold();
-                                });
-
-                                foreach (var row in rows)
-                                {
-                                    table.Cell().Text(row.Time.ToString("yyyy-MM-dd HH:mm:ss"));
-                                    table.Cell().Text(row.Msg);
-                                }
-                            });
-
                             // Alarm Log
                             
                             col.Item().PaddingTop(10);
-                            col.Item().Text("Alarm Log")
+                            col.Item().Text("2. Alarm Log")
                                 .FontSize(12)
-                                .Bold()
-                                .FontColor(PdfColors.Red.Medium);
-
+                                .Bold();
+                            col.Item().PaddingTop(3).LineHorizontal(2);
+                            col.Item().PaddingBottom(10);
+                                
                             if (alarmRows.Count == 0)
                             {
                                 // Alarm 없음 표시
@@ -1156,22 +1186,88 @@ namespace PrintLogPdf3
 
                                     table.Header(h =>
                                     {
-                                        h.Cell().Text("Time").Bold();
-                                        h.Cell().Text("Alarm").Bold();
+                                        h.Cell().Background("#3D3D3D").Padding(5).Text("Time").Bold().FontColor(PdfColors.White);
+                                        h.Cell().Background("#3D3D3D").Padding(5).Text("Alarm").Bold().FontColor(PdfColors.White);
                                     });
 
+                                    int alarmRowIdx = 0;
                                     foreach (var row in alarmRows)
                                     {
-                                        table.Cell()
+                                        var bg = alarmRowIdx % 2 == 0 ? "#FFFFFF" : "#F0F0F0";
+                                        table.Cell().Background(bg).Padding(5)
                                             .Text(row.Time.ToString("yyyy-MM-dd HH:mm:ss"));
-                                        table.Cell()
+                                        table.Cell().Background(bg).Padding(5)
                                             .Text(row.Msg);
+                                        alarmRowIdx++;
                                     }
-                                });
-                                
+                                }
+                                );
+
                             }
-                                col.Item().PageBreak();
-                                ComposeBatchGlobalLogGraph(col, batch);
+
+                            // Alarm section 후 page break
+                            col.Item().PageBreak();
+
+                            // System Log
+                            col.Item().Text("3. System Log")
+                                .FontSize(12)
+                                .Bold();
+                            col.Item().PaddingTop(3).LineHorizontal(2);
+                            col.Item().PaddingBottom(10);
+
+                            col.Item().Table(table =>
+                            {
+                                table.ColumnsDefinition(c =>
+                                {
+                                    c.ConstantColumn(160);
+                                    c.RelativeColumn();
+                                });
+
+                                table.Header(h =>
+                                {
+                                    h.Cell().Background("#3D3D3D").Padding(5).Text("Time").Bold().FontColor(PdfColors.White);
+                                    h.Cell().Background("#3D3D3D").Padding(5).Text("Message").Bold().FontColor(PdfColors.White);
+                                });
+
+                                int sysRowIdx = 0;
+                                foreach (var row in rows)
+                                {
+                                    var bg = sysRowIdx % 2 == 0 ? "#FFFFFF" : "#F0F0F0";
+                                    table.Cell().Background(bg).Padding(5).Text(row.Time.ToString("yyyy-MM-dd HH:mm:ss"));
+                                    table.Cell().Background(bg).Padding(5).Text(row.Msg);
+                                    sysRowIdx++;
+                                }
+                            });
+
+                            col.Item().PageBreak();
+
+                            // 4. Internal Pressure
+                            col.Item().Text("4. Operation Graph - Internal Pressure")
+                                .FontSize(12)
+                                .Bold();
+                            col.Item().PaddingTop(3).LineHorizontal(2);
+                            col.Item().PaddingBottom(10);
+                            ComposeBatchGlobalLogGraph(col, batch, 0);
+
+                            col.Item().PageBreak();
+
+                            // 5. Internal Humidity
+                            col.Item().Text("5. Operation Graph - Internal Humidity")
+                                .FontSize(12)
+                                .Bold();
+                            col.Item().PaddingTop(3).LineHorizontal(2);
+                            col.Item().PaddingBottom(10);
+                            ComposeBatchGlobalLogGraph(col, batch, 1);
+
+                            col.Item().PageBreak();
+
+                            // 6. Internal Temperature
+                            col.Item().Text("6. Operation Graph - Internal Temperature")
+                                .FontSize(12)
+                                .Bold();
+                            col.Item().PaddingTop(3).LineHorizontal(2);
+                            col.Item().PaddingBottom(10);
+                            ComposeBatchGlobalLogGraph(col, batch, 2);
        
                         });
                             page.Footer()
